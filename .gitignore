@@ -4,3 +4,6 @@
 .claude/
 *.xcuserdata
 *.xcworkspace
+CLAUDE.md
+RELEASE.md
+build.sh
