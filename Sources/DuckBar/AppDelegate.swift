@@ -26,9 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var imageCache: [ImageCacheKey: NSImage] = [:]
     private var recordingMonitor: Any?
+    private var shareCardWindowController: ShareCardWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        applyUpdateSettings()
         monitor = SessionMonitor()
 
         // 메뉴바 아이템 설정
@@ -90,6 +92,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .stopRecordingHotkey,
             object: nil
         )
+
+        // 공유 카드 미리보기
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(showShareCardPreview),
+            name: .openShareCard,
+            object: nil
+        )
+
+        // 자동 업데이트 설정 변경 감지
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applyUpdateSettings),
+            name: .automaticUpdateCheckChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applyUpdateSettings),
+            name: .automaticUpdateInstallChanged,
+            object: nil
+        )
+    }
+
+    @objc private func applyUpdateSettings() {
+        updaterController.updater.automaticallyChecksForUpdates = settings.automaticUpdateCheck
+        updaterController.updater.automaticallyDownloadsUpdates = settings.automaticUpdateInstall
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -180,6 +209,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshItem.target = self
         menu.addItem(refreshItem)
 
+        let shareCardItem = NSMenuItem(title: L.shareCardPreview, action: #selector(showShareCardPreview), keyEquivalent: "s")
+        shareCardItem.target = self
+        menu.addItem(shareCardItem)
+
         let checkUpdateItem = NSMenuItem(title: L.checkForUpdates, action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "u")
         checkUpdateItem.target = updaterController
         menu.addItem(checkUpdateItem)
@@ -207,18 +240,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
     }
 
+    @objc private func showShareCardPreview() {
+        shareCardWindowController = ShareCardWindowController(stats: monitor.usageStats, chartTab: settings.defaultChartTab)
+        shareCardWindowController?.show()
+    }
+
     @objc private func refreshAction() {
         Task { await monitor.refreshAsync() }
     }
 
     @objc private func openSettingsAction() {
-        NotificationCenter.default.post(name: .openSettings, object: nil)
-        togglePopover()
+        let wasShown = popoverManager.isShown
+        if !wasShown { togglePopover() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (wasShown ? 0 : 0.15)) {
+            NotificationCenter.default.post(name: .openSettings, object: nil)
+        }
     }
 
     @objc private func openHelpAction() {
-        NotificationCenter.default.post(name: .openHelp, object: nil)
-        togglePopover()
+        let wasShown = popoverManager.isShown
+        if !wasShown { togglePopover() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (wasShown ? 0 : 0.15)) {
+            NotificationCenter.default.post(name: .openHelp, object: nil)
+        }
     }
 
     @objc private func showAboutAction() {
