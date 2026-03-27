@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Sparkle
+import UserNotifications
 @preconcurrency import HotKey
 
 @MainActor
@@ -27,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var imageCache: [ImageCacheKey: NSImage] = [:]
     private var recordingMonitor: Any?
     private var shareCardWindowController: ShareCardWindowController?
+    private var weeklyReportWindowController: WeeklyReportWindowController?
+    private var pendingWeeklyReport: WeeklyReport?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
@@ -49,6 +52,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApplication.shared.terminate(nil)
         }
         popoverManager.setContentView(statusMenuView)
+
+        // 알림 권한 요청 및 설정 연결
+        monitor.alertsEnabled = settings.usageAlertsEnabled
+        monitor.alertThresholds = [settings.alertThreshold1, settings.alertThreshold2, settings.alertThreshold3]
+        if settings.usageAlertsEnabled {
+            UsageAlertManager.shared.requestPermissionIfNeeded()
+        }
+
+        // 주간 리포트 체크 (앱 시작 시)
+        WeeklyReportManager.shared.checkAndSend { [weak self] report in
+            self?.showWeeklyReport(report)
+        }
+
+        // 알림 탭 핸들러
+        UNUserNotificationCenter.current().delegate = self
 
         // 세션 모니터 시작 (설정된 갱신 주기)
         monitor.start(interval: settings.refreshInterval.rawValue)
@@ -241,12 +259,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showShareCardPreview() {
-        shareCardWindowController = ShareCardWindowController(stats: monitor.usageStats, chartTab: settings.defaultChartTab)
+        shareCardWindowController = ShareCardWindowController(stats: monitor.usageStats, chartTab: settings.defaultChartTab, provider: settings.activeProvider)
         shareCardWindowController?.show()
     }
 
     @objc private func refreshAction() {
-        Task { await monitor.refreshAsync() }
+        Task {
+            await monitor.refreshAsync()
+            checkMilestones(stats: monitor.usageStats)
+        }
     }
 
     @objc private func openSettingsAction() {
@@ -285,6 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popoverManager.isShown {
             Task {
                 await monitor.refreshAsync()
+                checkMilestones(stats: monitor.usageStats)
             }
         }
     }
@@ -300,6 +322,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastRefreshInterval = newInterval
             monitor.restartTimers(interval: newInterval)
         }
+
+        monitor.alertsEnabled = settings.usageAlertsEnabled
+        monitor.alertThresholds = [settings.alertThreshold1, settings.alertThreshold2, settings.alertThreshold3]
 
         let state = monitor.aggregateState
         let isEmpty = monitor.sessions.isEmpty
@@ -370,16 +395,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             parts.append(text)
         }
         if items.contains(.tokens) {
-            parts.append(TokenUsage.formatTokens(stats.fiveHourTokens.totalTokens))
+            switch settings.activeProvider {
+            case .claude: parts.append(TokenUsage.formatTokens(stats.fiveHourTokens.totalTokens))
+            case .codex:  parts.append(TokenUsage.formatTokens(stats.codexFiveHourTokens.totalTokens))
+            case .both:   parts.append(TokenUsage.formatTokens(stats.fiveHourTokens.totalTokens + stats.codexFiveHourTokens.totalTokens))
+            }
         }
         if items.contains(.weeklyTokens) {
-            parts.append(TokenUsage.formatTokens(stats.oneWeekTokens.totalTokens))
+            switch settings.activeProvider {
+            case .claude: parts.append(TokenUsage.formatTokens(stats.oneWeekTokens.totalTokens))
+            case .codex:  parts.append(TokenUsage.formatTokens(stats.codexOneWeekTokens.totalTokens))
+            case .both:   parts.append(TokenUsage.formatTokens(stats.oneWeekTokens.totalTokens + stats.codexOneWeekTokens.totalTokens))
+            }
         }
         if items.contains(.cost) {
-            parts.append(TokenUsage.formatCost(stats.fiveHourTokens.estimatedCostUSD))
+            switch settings.activeProvider {
+            case .claude: parts.append(TokenUsage.formatCost(stats.fiveHourTokens.estimatedCostUSD))
+            case .codex:  parts.append(TokenUsage.formatCost(stats.codexFiveHourTokens.estimatedCostUSD))
+            case .both:   parts.append(TokenUsage.formatCost(stats.fiveHourTokens.estimatedCostUSD + stats.codexFiveHourTokens.estimatedCostUSD))
+            }
         }
         if items.contains(.weeklyCost) {
-            parts.append(TokenUsage.formatCost(stats.oneWeekTokens.estimatedCostUSD))
+            switch settings.activeProvider {
+            case .claude: parts.append(TokenUsage.formatCost(stats.oneWeekTokens.estimatedCostUSD))
+            case .codex:  parts.append(TokenUsage.formatCost(stats.codexOneWeekTokens.estimatedCostUSD))
+            case .both:   parts.append(TokenUsage.formatCost(stats.oneWeekTokens.estimatedCostUSD + stats.codexOneWeekTokens.estimatedCostUSD))
+            }
         }
         if items.contains(.context) {
             let pct = Int(stats.contextInfo.usagePercent * 100)
@@ -477,5 +518,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         animationTimer = nil
         currentAnimationFrame = 0
         animationDirection = 1
+    }
+
+    // MARK: - 마일스톤 체크
+
+    func checkMilestones(stats: UsageStats) {
+        // 오늘 사용량 있으면 streak 업데이트
+        let hasUsageToday = stats.fiveHourTokens.totalTokens > 0 || stats.oneWeekTokens.totalTokens > 0
+        let streak = MilestoneManager.shared.updateStreak(hasUsageToday: hasUsageToday)
+
+        // 일간 피크: hourlyData에서 오늘 토큰 합산
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        let dailyPeak = stats.hourlyData
+            .filter { $0.hour >= todayStart }
+            .reduce(0) { $0 + $1.totalTokens }
+
+        MilestoneManager.shared.check(stats: stats, dailyPeakTokens: dailyPeak, currentStreak: streak)
+    }
+
+    // MARK: - 주간 리포트 표시
+
+    func showWeeklyReport(_ report: WeeklyReport) {
+        weeklyReportWindowController = WeeklyReportWindowController(report: report)
+        weeklyReportWindowController?.show()
+    }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+
+@MainActor
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let type = response.notification.request.content.userInfo["type"] as? String
+        if type == "weeklyReport", let report = pendingWeeklyReport {
+            showWeeklyReport(report)
+        } else if type == "milestone" {
+            showShareCardPreview()
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }

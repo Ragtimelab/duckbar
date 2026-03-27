@@ -6,6 +6,7 @@ import Charts
 struct ShareCardView: View {
     let stats: UsageStats
     var chartTab: String = "heatmap"  // "line" or "heatmap"
+    var provider: Provider = .claude
 
     private let cardWidth: CGFloat = 360
 
@@ -45,8 +46,17 @@ struct ShareCardView: View {
 
     private var headerSection: some View {
         HStack {
-            Text("🦆")
-                .font(.system(size: 22))
+            Group {
+                if let nsImage = Bundle.main.image(forResource: "duck_icon") {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Text("🦆")
+                        .font(.system(size: 22))
+                }
+            }
+            .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text("DuckBar")
                     .font(.system(size: 15, weight: .bold))
@@ -112,10 +122,35 @@ struct ShareCardView: View {
     // MARK: - Token Usage
 
     private var tokenSection: some View {
-        HStack(spacing: 0) {
-            tokenBlock(title: "5h TOKENS", tokens: stats.fiveHourTokens)
-            Divider().frame(width: 1).background(Color.white.opacity(0.08))
-            tokenBlock(title: "1w TOKENS", tokens: stats.oneWeekTokens)
+        Group {
+            switch provider {
+            case .claude:
+                HStack(spacing: 0) {
+                    tokenBlock(title: "5h TOKENS", tokens: stats.fiveHourTokens)
+                    Divider().frame(width: 1).background(Color.white.opacity(0.08))
+                    tokenBlock(title: "1w TOKENS", tokens: stats.oneWeekTokens)
+                }
+            case .codex:
+                HStack(spacing: 0) {
+                    codexTokenBlock(title: "5h TOKENS", tokens: stats.codexFiveHourTokens)
+                    Divider().frame(width: 1).background(Color.white.opacity(0.08))
+                    codexTokenBlock(title: "1w TOKENS", tokens: stats.codexOneWeekTokens)
+                }
+            case .both:
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        tokenBlock(title: "Claude 5h", tokens: stats.fiveHourTokens)
+                        Divider().frame(width: 1).background(Color.white.opacity(0.08))
+                        tokenBlock(title: "Claude 1w", tokens: stats.oneWeekTokens)
+                    }
+                    Divider().background(Color.white.opacity(0.15))
+                    HStack(spacing: 0) {
+                        codexTokenBlock(title: "Codex 5h", tokens: stats.codexFiveHourTokens)
+                        Divider().frame(width: 1).background(Color.white.opacity(0.08))
+                        codexTokenBlock(title: "Codex 1w", tokens: stats.codexOneWeekTokens)
+                    }
+                }
+            }
         }
     }
 
@@ -137,6 +172,34 @@ struct ShareCardView: View {
             HStack(spacing: 8) {
                 miniStat(label: "C.Wr", value: TokenUsage.formatTokens(tokens.cacheCreationTokens), color: .orange)
                 miniStat(label: "C.Rd", value: TokenUsage.formatTokens(tokens.cacheReadTokens), color: .purple)
+            }
+
+            Text(TokenUsage.formatCost(tokens.estimatedCostUSD))
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(costColor(tokens.estimatedCostUSD))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+    }
+
+    private func codexTokenBlock(title: String, tokens: CodexTokenUsage) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .tracking(1.2)
+
+            Text(TokenUsage.formatTokens(tokens.totalTokens))
+                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 8) {
+                miniStat(label: "In", value: TokenUsage.formatTokens(tokens.inputTokens), color: .blue)
+                miniStat(label: "Out", value: TokenUsage.formatTokens(tokens.outputTokens), color: .green)
+            }
+            HStack(spacing: 8) {
+                miniStat(label: "Cache", value: TokenUsage.formatTokens(tokens.cachedInputTokens), color: .purple)
             }
 
             Text(TokenUsage.formatCost(tokens.estimatedCostUSD))
@@ -359,8 +422,8 @@ struct ShareCardView: View {
 // MARK: - 카드 렌더링 → NSImage
 
 @MainActor
-func renderShareCard(stats: UsageStats, chartTab: String = "heatmap") -> NSImage? {
-    let view = ShareCardView(stats: stats, chartTab: chartTab)
+func renderShareCard(stats: UsageStats, chartTab: String = "heatmap", provider: Provider = .claude) -> NSImage? {
+    let view = ShareCardView(stats: stats, chartTab: chartTab, provider: provider)
     let renderer = ImageRenderer(content: view)
     renderer.scale = 2.0  // Retina
     return renderer.nsImage
@@ -369,8 +432,8 @@ func renderShareCard(stats: UsageStats, chartTab: String = "heatmap") -> NSImage
 // MARK: - 클립보드에 복사
 
 @MainActor
-func copyShareCardToClipboard(stats: UsageStats, chartTab: String = "heatmap") {
-    guard let image = renderShareCard(stats: stats, chartTab: chartTab) else { return }
+func copyShareCardToClipboard(stats: UsageStats, chartTab: String = "heatmap", provider: Provider = .claude) {
+    guard let image = renderShareCard(stats: stats, chartTab: chartTab, provider: provider) else { return }
     let pasteboard = NSPasteboard.general
     pasteboard.clearContents()
     pasteboard.writeObjects([image])
