@@ -4,6 +4,7 @@ struct SessionDiscovery {
     private let claudeDir: URL
     private let sessionsDir: URL
     private let projectsDir: URL
+    private let desktopAgentSessionsDir: URL
     private let fm = FileManager.default
 
     init() {
@@ -11,6 +12,42 @@ struct SessionDiscovery {
         claudeDir = home.appendingPathComponent(".claude")
         sessionsDir = claudeDir.appendingPathComponent("sessions")
         projectsDir = claudeDir.appendingPathComponent("projects")
+        desktopAgentSessionsDir = home
+            .appendingPathComponent("Library/Application Support/Claude/local-agent-mode-sessions")
+    }
+
+    /// CLI projects + Desktop App agent mode의 모든 프로젝트 하위 디렉토리 반환
+    private func allProjectSubDirs() -> [URL] {
+        var dirs: [URL] = []
+
+        // 1. CLI: ~/.claude/projects/{hash}/
+        if let children = try? fm.contentsOfDirectory(
+            at: projectsDir, includingPropertiesForKeys: nil
+        ) {
+            dirs.append(contentsOf: children)
+        }
+
+        // 2. Desktop App: local-agent-mode-sessions/.../.claude/projects/{hash}/
+        if let topDirs = try? fm.contentsOfDirectory(
+            at: desktopAgentSessionsDir, includingPropertiesForKeys: nil
+        ) {
+            for d1 in topDirs {
+                guard let d2s = try? fm.contentsOfDirectory(at: d1, includingPropertiesForKeys: nil) else { continue }
+                for d2 in d2s {
+                    guard let locals = try? fm.contentsOfDirectory(at: d2, includingPropertiesForKeys: nil) else { continue }
+                    for local in locals where local.lastPathComponent.hasPrefix("local_") {
+                        let projDir = local.appendingPathComponent(".claude/projects")
+                        if let projChildren = try? fm.contentsOfDirectory(
+                            at: projDir, includingPropertiesForKeys: nil
+                        ) {
+                            dirs.append(contentsOf: projChildren)
+                        }
+                    }
+                }
+            }
+        }
+
+        return dirs
     }
 
     // MARK: - Session Discovery
@@ -87,11 +124,7 @@ struct SessionDiscovery {
         var totalCost = 0.0
         var seenRequests = Set<String>()
 
-        guard let projectDirs = try? fm.contentsOfDirectory(
-            at: projectsDir, includingPropertiesForKeys: nil
-        ) else { return }
-
-        for dir in projectDirs {
+        for dir in allProjectSubDirs() {
             guard let files = try? fm.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: nil
             ) else { continue }
@@ -302,11 +335,7 @@ struct SessionDiscovery {
         var seenRequests = Set<String>()
         var merged: [String: ModelUsage] = [:]
 
-        guard let projectDirs = try? fm.contentsOfDirectory(
-            at: projectsDir, includingPropertiesForKeys: nil
-        ) else { return }
-
-        for dir in projectDirs {
+        for dir in allProjectSubDirs() {
             guard let files = try? fm.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
             ) else { continue }
@@ -384,12 +413,7 @@ struct SessionDiscovery {
 
         let calendar = Calendar.current
 
-        guard let projectDirs = try? fm.contentsOfDirectory(
-            at: projectsDir,
-            includingPropertiesForKeys: nil
-        ) else { return }
-
-        for dir in projectDirs {
+        for dir in allProjectSubDirs() {
             guard let files = try? fm.contentsOfDirectory(
                 at: dir,
                 includingPropertiesForKeys: [.contentModificationDateKey]
@@ -675,15 +699,10 @@ struct SessionDiscovery {
 
     private func loadContextInfo(_ stats: inout UsageStats) {
         // 가장 최근 JSONL의 마지막 assistant 메시지에서 컨텍스트 추출
-        guard let projectDirs = try? fm.contentsOfDirectory(
-            at: projectsDir,
-            includingPropertiesForKeys: nil
-        ) else { return }
-
         var latestDate = Date.distantPast
         var latestUsage: [String: Any]?
 
-        for dir in projectDirs {
+        for dir in allProjectSubDirs() {
             guard let files = try? fm.contentsOfDirectory(
                 at: dir,
                 includingPropertiesForKeys: [.contentModificationDateKey]
