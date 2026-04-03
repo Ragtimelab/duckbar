@@ -74,6 +74,12 @@ struct SettingsView: View {
     let onDone: () -> Void
     @State private var isRecordingHotkey = false
 
+    /// 헤더(~52pt) + 팝오버 여백을 제외한 스크롤 영역 최대 높이
+    private var maxScrollHeight: CGFloat {
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
+        return screenHeight - 133
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -108,7 +114,9 @@ struct SettingsView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+
                 // Provider
                 VStack(alignment: .leading, spacing: 8) {
                     Label {
@@ -559,6 +567,8 @@ struct SettingsView: View {
                     .padding(.vertical, 10)
             }
             .id(settings.language)
+            } // ScrollView
+            .frame(maxHeight: maxScrollHeight)
         }
         .frame(width: settings.popoverSize.width)
     }

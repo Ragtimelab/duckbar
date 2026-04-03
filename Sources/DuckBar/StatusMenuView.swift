@@ -51,57 +51,69 @@ struct StatusMenuView: View {
         }
     }
 
+    /// 헤더 + 하단 메뉴를 제외한 스크롤 영역 최대 높이
+    private var maxScrollHeight: CGFloat {
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
+        // 헤더(~53pt) + 하단 메뉴(~44pt) + 팝오버 여백(~80pt)
+        return screenHeight - 177
+    }
+
     private var mainView: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerView
             Divider()
 
-            if monitor.sessions.isEmpty {
-                emptyStateView
-            } else {
-                sessionListView
-            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if monitor.sessions.isEmpty {
+                        emptyStateView
+                    } else {
+                        sessionListView
+                    }
 
-            if settings.visibleSections.contains(.rateLimits) {
-                Divider()
-                rateLimitsView
-            }
-            if settings.visibleSections.contains(.fiveHourTokens) {
-                Divider()
-                switch settings.activeProvider {
-                case .claude:
-                    tokenUsageView(title: L.fiveHourWindow, tokens: monitor.usageStats.fiveHourTokens)
-                case .codex:
-                    codexTokenUsageView(title: L.fiveHourWindow, tokens: monitor.usageStats.codexFiveHourTokens)
-                case .both:
-                    tokenUsageView(title: "Claude · \(L.fiveHourWindow)", tokens: monitor.usageStats.fiveHourTokens)
-                    codexTokenUsageView(title: "Codex · \(L.fiveHourWindow)", tokens: monitor.usageStats.codexFiveHourTokens)
+                    if settings.visibleSections.contains(.rateLimits) {
+                        Divider()
+                        rateLimitsView
+                    }
+                    if settings.visibleSections.contains(.fiveHourTokens) {
+                        Divider()
+                        switch settings.activeProvider {
+                        case .claude:
+                            tokenUsageView(title: L.fiveHourWindow, tokens: monitor.usageStats.fiveHourTokens)
+                        case .codex:
+                            codexTokenUsageView(title: L.fiveHourWindow, tokens: monitor.usageStats.codexFiveHourTokens)
+                        case .both:
+                            tokenUsageView(title: "Claude · \(L.fiveHourWindow)", tokens: monitor.usageStats.fiveHourTokens)
+                            codexTokenUsageView(title: "Codex · \(L.fiveHourWindow)", tokens: monitor.usageStats.codexFiveHourTokens)
+                        }
+                    }
+                    if settings.visibleSections.contains(.oneWeekTokens) {
+                        Divider()
+                        switch settings.activeProvider {
+                        case .claude:
+                            tokenUsageView(title: L.oneWeekWindow, tokens: monitor.usageStats.oneWeekTokens)
+                        case .codex:
+                            codexTokenUsageView(title: L.oneWeekWindow, tokens: monitor.usageStats.codexOneWeekTokens)
+                        case .both:
+                            tokenUsageView(title: "Claude · \(L.oneWeekWindow)", tokens: monitor.usageStats.oneWeekTokens)
+                            codexTokenUsageView(title: "Codex · \(L.oneWeekWindow)", tokens: monitor.usageStats.codexOneWeekTokens)
+                        }
+                    }
+                    if settings.visibleSections.contains(.chart) {
+                        Divider()
+                        chartToggleView
+                    }
+                    if settings.visibleSections.contains(.modelUsage) && !monitor.usageStats.modelUsages.isEmpty {
+                        Divider()
+                        modelUsageView
+                    }
+                    if settings.visibleSections.contains(.context) {
+                        Divider()
+                        contextView
+                    }
                 }
             }
-            if settings.visibleSections.contains(.oneWeekTokens) {
-                Divider()
-                switch settings.activeProvider {
-                case .claude:
-                    tokenUsageView(title: L.oneWeekWindow, tokens: monitor.usageStats.oneWeekTokens)
-                case .codex:
-                    codexTokenUsageView(title: L.oneWeekWindow, tokens: monitor.usageStats.codexOneWeekTokens)
-                case .both:
-                    tokenUsageView(title: "Claude · \(L.oneWeekWindow)", tokens: monitor.usageStats.oneWeekTokens)
-                    codexTokenUsageView(title: "Codex · \(L.oneWeekWindow)", tokens: monitor.usageStats.codexOneWeekTokens)
-                }
-            }
-            if settings.visibleSections.contains(.chart) {
-                Divider()
-                chartToggleView
-            }
-            if settings.visibleSections.contains(.modelUsage) && !monitor.usageStats.modelUsages.isEmpty {
-                Divider()
-                modelUsageView
-            }
-            if settings.visibleSections.contains(.context) {
-                Divider()
-                contextView
-            }
+            .frame(maxHeight: maxScrollHeight)
 
             Spacer()
                 .frame(height: 10)

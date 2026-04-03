@@ -6,6 +6,11 @@ struct HelpView: View {
 
     private var s: CGFloat { settings.popoverSize.fontScale }
 
+    private var maxScrollHeight: CGFloat {
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
+        return screenHeight - 133
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -33,6 +38,7 @@ struct HelpView: View {
 
             Divider()
 
+            ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 helpSection(title: "사용 한도", items: [
                     ("5h", "5시간 내 API 호출 사용률"),
@@ -69,6 +75,8 @@ struct HelpView: View {
                     ("ctx", "컨텍스트 창 사용률 (%)"),
                 ])
             }
+            } // ScrollView
+            .frame(maxHeight: maxScrollHeight)
         }
         .frame(width: settings.popoverSize.width)
     }
