@@ -323,7 +323,7 @@ struct NotificationHistoryItem: Codable, Identifiable, Equatable {
     }
 }
 
-// MARK: - Badge (업적 뱃지)
+// MARK: - Badge (뱃지)
 
 struct Badge: Identifiable, Equatable {
     let id: String

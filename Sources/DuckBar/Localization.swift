@@ -92,14 +92,14 @@ enum L {
     static var heatmapMore: String { lang == .korean ? "많음" : "More" }
 
     // Settings (inline 로컬라이제이션 통합)
-    // Badges / 업적
-    static var badges: String { lang == .korean ? "업적" : "Achievements" }
-    static var badgesShareCard: String { lang == .korean ? "업적 공유 카드" : "Achievement Card" }
+    // Badges / 뱃지
+    static var badges: String { lang == .korean ? "뱃지" : "Badges" }
+    static var badgesShareCard: String { lang == .korean ? "뱃지 공유 카드" : "Badge Card" }
     static var badgeNotAchieved: String { lang == .korean ? "미달성" : "Locked" }
     static var badgeCategoryDailyPeak: String { lang == .korean ? "일간 최고 기록" : "Daily Peak" }
     static var badgeCategoryStreak: String { lang == .korean ? "연속 사용" : "Streak" }
     static var badgeCategoryTotalCost: String { lang == .korean ? "누적 비용" : "Total Cost" }
-    static var badgeShareCardTitle: String { lang == .korean ? "DuckBar 업적" : "DuckBar Achievements" }
+    static var badgeShareCardTitle: String { lang == .korean ? "DuckBar 뱃지" : "DuckBar Badges" }
     static var badgeStatTotalTokens: String { lang == .korean ? "누적 토큰" : "Total Tokens" }
     static var badgeStatTotalCost: String { lang == .korean ? "누적 비용" : "Total Cost" }
     static var badgeStatStreak: String { lang == .korean ? "연속 사용" : "Streak" }

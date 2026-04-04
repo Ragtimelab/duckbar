@@ -538,21 +538,20 @@ struct MenuButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            VStack(spacing: 3) {
                 Image(systemName: icon)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 16)
-                Text(title)
                     .font(.system(size: 12))
-                Spacer()
+                    .foregroundStyle(.secondary)
+                Text(title)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
-                    .padding(.horizontal, 6)
             )
             .contentShape(Rectangle())
         }
